@@ -1,14 +1,3 @@
-"""
-This part of code is the DQN brain, which is a brain of the agent.
-All decisions are made in here.
-Using Tensorflow to build the neural network.
-
-View more on my tutorial page: https://morvanzhou.github.io/tutorials/
-
-Using:
-Tensorflow: 1.0
-gym: 0.7.3
-"""
 
 import numpy as np
 import pandas as pd
@@ -32,7 +21,7 @@ class DeepQNetwork:
             batch_size=32,
             e_greedy_increment=None,
             output_graph=True,
-            point_features=2,
+            point_features=1,
     ):
         self.n_actions = n_actions
         self.n_features = n_features
@@ -44,7 +33,7 @@ class DeepQNetwork:
         self.batch_size = batch_size  #控制经验回放数据量
         self.epsilon_increment = e_greedy_increment    #对epsilon的增量
         self.epsilon = 0 if e_greedy_increment is not None else self.epsilon_max
-        self.point_features=point_features
+        self.point_features = point_features
 
         # total learning step
         self.learn_step_counter = 0
@@ -72,10 +61,13 @@ class DeepQNetwork:
 
 
         # ------------------ build evaluate_net ------------------
-        self.s = tf.placeholder(tf.float32, [None, self.n_features], name='s')  # input
+        self.s = tf.placeholder(tf.float32, [None, 4], name='s')  # input
         self.q_target = tf.placeholder(tf.float32, [None, self.n_actions], name='Q_target')  # for calculating loss
 
-        self.points = tf.placeholder(tf.float32, [None, self.point_features*7], name='points')
+        '''
+        先把单独点放到s整体里来看
+        '''
+        self.points = tf.placeholder(tf.float32, [None, 7], name='points')
 
         with tf.variable_scope('eval_net'):
             # c_names(collections_names) are the collections to store variables
@@ -85,7 +77,7 @@ class DeepQNetwork:
 
             # first layer. collections is used later when assign to target net
             with tf.variable_scope('l1'):
-                w1 = tf.get_variable('w1', [self.n_features, n_l1], initializer=w_initializer, collections=c_names)
+                w1 = tf.get_variable('w1', [4, n_l1], initializer=w_initializer, collections=c_names)
                 b1 = tf.get_variable('b1', [1, n_l1], initializer=b_initializer, collections=c_names)
                 l1 = tf.nn.relu(tf.matmul(self.s, w1) + b1)
 
@@ -94,10 +86,22 @@ class DeepQNetwork:
                 w2 = tf.get_variable('w2', [n_l1, self.n_actions], initializer=w_initializer, collections=c_names)
                 b2 = tf.get_variable('b2', [1, self.n_actions], initializer=b_initializer, collections=c_names)
 
-                w22 = tf.get_variable('w22', [self.point_features*7, self.n_actions], initializer=w_initializer, collections=c_names)
+                w22 = tf.get_variable('w22', [7, self.n_actions], initializer=w_initializer, collections=c_names)
                 b22 = tf.get_variable('b22', [1, self.n_actions], initializer=b_initializer, collections=c_names)
 
                 self.q_eval = tf.matmul(l1, w2) + b2+tf.nn.relu(tf.matmul(self.points, w22) + b22)
+
+            # first layer. collections is used later when assign to target net
+            # with tf.variable_scope('l1'):
+            #     w1 = tf.get_variable('w1', [self.n_features, n_l1], initializer=w_initializer, collections=c_names)
+            #     b1 = tf.get_variable('b1', [1, n_l1], initializer=b_initializer, collections=c_names)
+            #     l1 = tf.nn.relu(tf.matmul(self.s, w1) + b1)
+            #
+            # # second layer. collections is used later when assign to target net
+            # with tf.variable_scope('l2'):
+            #     w2 = tf.get_variable('w2', [n_l1, self.n_actions], initializer=w_initializer, collections=c_names)
+            #     b2 = tf.get_variable('b2', [1, self.n_actions], initializer=b_initializer, collections=c_names)
+            #     self.q_eval = tf.matmul(l1, w2) + b2
 
         with tf.variable_scope('loss'):
             self.loss = tf.reduce_mean(tf.squared_difference(self.q_target, self.q_eval))
@@ -106,18 +110,18 @@ class DeepQNetwork:
 
 
         # ------------------ build target_net ------------------
-        self.s_ = tf.placeholder(tf.float32, [None, self.n_features], name='s_')    # input
-        #self.points = tf.placeholder(tf.float32, [None, self.point_features * 7], name='points')
+        self.s_ = tf.placeholder(tf.float32, [None, 4], name='s_')    # input
+        self.points_ = tf.placeholder(tf.float32, [None, 7], name='points')
 
         with tf.variable_scope('target_net'):
             # c_names(collections_names) are the collections to store variables
             c_names, n_l1, w_initializer, b_initializer = \
-                ['eval_net_params', tf.GraphKeys.GLOBAL_VARIABLES], 10, \
+                ['target_net_params', tf.GraphKeys.GLOBAL_VARIABLES], 10, \
                 tf.random_normal_initializer(0., 0.3), tf.constant_initializer(0.1)  # config of layers
 
             # first layer. collections is used later when assign to target net
             with tf.variable_scope('l1'):
-                w1 = tf.get_variable('w1', [self.n_features, n_l1], initializer=w_initializer, collections=c_names)
+                w1 = tf.get_variable('w1', [4, n_l1], initializer=w_initializer, collections=c_names)
                 b1 = tf.get_variable('b1', [1, n_l1], initializer=b_initializer, collections=c_names)
                 l1 = tf.nn.relu(tf.matmul(self.s_, w1) + b1)
 
@@ -126,11 +130,27 @@ class DeepQNetwork:
                 w2 = tf.get_variable('w2', [n_l1, self.n_actions], initializer=w_initializer, collections=c_names)
                 b2 = tf.get_variable('b2', [1, self.n_actions], initializer=b_initializer, collections=c_names)
 
-                w22 = tf.get_variable('w22', [self.point_features * 7, self.n_actions], initializer=w_initializer,
+                w22 = tf.get_variable('w22', [7, self.n_actions], initializer=w_initializer,
                                       collections=c_names)
                 b22 = tf.get_variable('b22', [1, self.n_actions], initializer=b_initializer, collections=c_names)
 
-                self.q_next = tf.matmul(l1, w2) + b2 + tf.nn.relu(tf.matmul(self.points, w22) + b22)
+                self.q_next = tf.matmul(l1, w2) + b2 + tf.nn.relu(tf.matmul(self.points_, w22) + b22)
+
+        # with tf.variable_scope('target_net'):
+        #         # c_names(collections_names) are the collections to store variables
+        #         c_names = ['target_net_params', tf.GraphKeys.GLOBAL_VARIABLES]
+        #
+        #         # first layer. collections is used later when assign to target net
+        #         with tf.variable_scope('l1'):
+        #             w1 = tf.get_variable('w1', [self.n_features, n_l1], initializer=w_initializer, collections=c_names)
+        #             b1 = tf.get_variable('b1', [1, n_l1], initializer=b_initializer, collections=c_names)
+        #             l1 = tf.nn.relu(tf.matmul(self.s_, w1) + b1)
+        #
+        #         # second layer. collections is used later when assign to target net
+        #         with tf.variable_scope('l2'):
+        #             w2 = tf.get_variable('w2', [n_l1, self.n_actions], initializer=w_initializer, collections=c_names)
+        #             b2 = tf.get_variable('b2', [1, self.n_actions], initializer=b_initializer, collections=c_names)
+        #             self.q_next = tf.matmul(l1, w2) + b2
 
             # c_names(collections_names) are the collections to store variables
             # c_names = ['target_net_params', tf.GraphKeys.GLOBAL_VARIABLES]
@@ -151,7 +171,15 @@ class DeepQNetwork:
         if not hasattr(self, 'memory_counter'):
             self.memory_counter = 0
 
-        transition = np.hstack((s, [a, r], s_))
+        # transition = np.hstack((s, [a, r], s_))
+        #
+        # # replace the old memory with new memory
+        # index = self.memory_counter % self.memory_size
+        # self.memory[index, :] = transition
+        #
+        # self.memory_counter += 1
+
+        transition = np.array((s, [a, r], s_))
 
         # replace the old memory with new memory
         index = self.memory_counter % self.memory_size
@@ -159,13 +187,35 @@ class DeepQNetwork:
 
         self.memory_counter += 1
 
+
     def choose_action(self, observation):        #传递数据的接口
         # to have batch dimension when feed into tf placeholder
+        # print(observation)
         observation = observation[np.newaxis, :]
-
+        # print(observation[0,[4,5,6,7]])
+        # #"第一个是空的"
+        # print(observation[0,[4,5,6,7]].shape)
+        # print(observation[0,[0,1,2,3,8,9,10]])
+        # print(observation[0,[0, 1, 2, 3, 8, 9, 10]].shape)
         if np.random.uniform() < self.epsilon:
             # forward feed the observation and get q value for every actions
-            actions_value = self.sess.run(self.q_eval, feed_dict={self.s: observation})
+
+            '''
+            错误：
+            需要把原来的序列转成矩阵，现在data_s（是个序列）维数是（4，），想办法转为（4,50700）矩阵形式
+            '''
+            data_s=np.array(observation[0,[4,5,6,7]])
+            #print(data_s.shape)
+            data_s=np.array(data_s)
+            data_s.reshape(-1,4)
+            #print(data_s.shape)
+
+            data_points=np.array(observation[0,[0,1,2,3,8,9,10]])
+            #print(data_points.shape)
+            data_points = np.array(data_points)
+            #print(data_points.shape)
+
+            actions_value = self.sess.run(self.q_eval, feed_dict={self.s: data_s, self.points: data_points})
             action = np.argmax(actions_value)
         else:
             action = np.random.randint(0, self.n_actions)
@@ -187,8 +237,10 @@ class DeepQNetwork:
         q_next, q_eval = self.sess.run(
             [self.q_next, self.q_eval],
             feed_dict={
-                self.s_: batch_memory[:, -self.n_features:],  # fixed params
-                self.s: batch_memory[:, :self.n_features],  # newest params
+                self.s_: batch_memory[:, 2][4:8],
+                self.points_:batch_memory[:, 2][0,1,2,3,8,9,10],# fixed params
+                self.s: batch_memory[:, 0][4:8],
+                self.points: batch_memory[:, 0][0, 1, 2, 3, 8, 9, 10],  # newest params
             })
 
         # change q_target w.r.t q_eval's action
@@ -228,8 +280,12 @@ class DeepQNetwork:
 
         # train eval network
         _, self.cost = self.sess.run([self._train_op, self.loss],
-                                     feed_dict={self.s: batch_memory[:, :self.n_features],
+                                     feed_dict={
+                                                self.s: batch_memory[:, 0][4:8],
+                                                self.points: batch_memory[:, 0][0, 1, 2, 3, 8, 9, 10],
                                                 self.q_target: q_target})
+
+        print(str(self.cost))
         self.cost_his.append(self.cost)
 
         # increasing epsilon

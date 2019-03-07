@@ -1,17 +1,22 @@
 from maze_env import Maze
 from RL_brain import DeepQNetwork
+import numpy as np
+import time
 
 
 def run_maze():
+    since = time.time()
     step = 0
     for episode in range(3000):
+        print("running maze "+str(episode)+" :3000")
         # initial observation
         observation = env.reset()
-
+        # print(observation)
+        # print("_________________")
         while True:
             # fresh env
             env.render()
-
+            # print(observation)
             # RL choose action based on observation
             action = RL.choose_action(observation)
 
@@ -32,11 +37,15 @@ def run_maze():
             step += 1
 
     # end of game
-    print('game over')
+    print('run over')
+    time_elapsed = time.time() - since
+    # 代码计时
+    print('The run_maze code run {:.0f}m {:.0f}s'.format(
+        time_elapsed // 60, time_elapsed % 60))
 
 
 if __name__ == "__main__":
-    # maze game
+
     env = Maze()
     RL = DeepQNetwork(env.n_actions, env.n_features,
                       learning_rate=0.01,
@@ -46,6 +55,6 @@ if __name__ == "__main__":
                       memory_size=2000,
                       # output_graph=True
                       )
-    env.after(100, run_maze)
-    env.mainloop()
+
+    run_maze()
     RL.plot_cost()
