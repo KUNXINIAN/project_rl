@@ -18,6 +18,8 @@ def run_maze():
             env.render()
             # print(observation)
             # RL choose action based on observation
+
+            #observation = np.array((self.T1, self.T2, self.T3, self.T4, self.P1, self.P2, self.P3, self.P4, self.D1, self.D2, self.D3))
             action = RL.choose_action(observation)
 
             # RL take action and get next observation and reward
