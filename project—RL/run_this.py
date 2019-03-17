@@ -7,8 +7,9 @@ import time
 def run_maze():
     since = time.time()
     step = 0
-    for episode in range(3000):
-        print("running maze "+str(episode)+" :3000")
+    epoch=2000
+    for episode in range(epoch):
+        print("running maze "+str(episode)+" :"+str(epoch))
         # initial observation
         observation = env.reset()
         # print(observation)

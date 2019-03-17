@@ -30,6 +30,8 @@ class Maze():
         self.D3 = np.array((0, 0))
 
         self.D4 = np.array((0, 0)) #采取动作后得到的决策点
+        self.acc=0
+        self.righttime=0
 
         #self._build_maze(num=2)
 
@@ -50,6 +52,9 @@ class Maze():
         #对于重新输入的看法：每一次因为predict点不同，对于决策来说S也不同，符合强化学习要求
         npydata=np.load("./insdata2npy/machine "+str(2)+".npy") #加载后列名变为0,1,2,3.....
         insdataframe = pd.DataFrame(npydata)
+        self.action_times=0
+        self.acc = 0
+        self.righttime = 0
 
         self.T1 = np.array((insdataframe.loc[1, 0], insdataframe.loc[1, 1]))  # ins点
         self.T2 = np.array((insdataframe.loc[2, 0], insdataframe.loc[2, 1]))
@@ -109,17 +114,25 @@ class Maze():
 
         if dec2label_distance == 0:
             dec2label_distance = 1
+            self.righttime +=1
 
         if dec2label_distance < t2label_distance:
             reward = 1/dec2label_distance
+            self.righttime += 1
         else:
             reward = -(dec2label_distance-t2label_distance)
         #print(reward)
 
+
+        '''
+        数据无法加载没有的项去判断，需要改成判定数据长度！！！！！
+        '''
         #if done
         done = False
-        if insdataframe.loc[4 + self.action_times, 0] == None:
+        if (5 + self.action_times)==len(insdataframe):
             done = True
+            self.acc=self.righttime/self.action_times
+            print("acc!!!!!   "+str(self.acc))
 
         return self.observation, reward, done
 

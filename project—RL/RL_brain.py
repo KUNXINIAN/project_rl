@@ -39,7 +39,7 @@ class DeepQNetwork:
         self.learn_step_counter = 0
 
         # initialize zero memory [s, a, r, s_]
-        self.memory = np.zeros((self.memory_size, n_features * 2 + 2)) #shape，行列。n_features * 2 + 2存储了两个状态以及上次状态采取的动作与获得的奖励
+        self.memory = np.zeros((self.memory_size, 3),dtype=object) #shape，行列。n_features * 2 + 2存储了两个状态以及上次状态采取的动作与获得的奖励
 
         # consist of [target_net, evaluate_net]
         self._build_net()
@@ -79,7 +79,7 @@ class DeepQNetwork:
             with tf.variable_scope('l1'):
                 w1 = tf.get_variable('w1', [50700, n_l1], initializer=w_initializer, collections=c_names)
                 b1 = tf.get_variable('b1', [1, n_l1], initializer=b_initializer, collections=c_names)
-                l1 = tf.nn.relu(tf.matmul(self.s, w1) + b1)
+                l1 = tf.nn.relu(tf.matmul(self.s, w1) + b1) #4*10
 
             # second layer. collections is used later when assign to target net
             with tf.variable_scope('l2'):
@@ -89,7 +89,24 @@ class DeepQNetwork:
                 w22 = tf.get_variable('w22', [2, self.n_actions], initializer=w_initializer, collections=c_names)
                 b22 = tf.get_variable('b22', [1, self.n_actions], initializer=b_initializer, collections=c_names)
 
-                self.q_eval = tf.matmul(l1, w2) + b2+tf.nn.relu(tf.matmul(self.points, w22) + b22)
+                #self.q_eval = tf.matmul(l1, w2) + b2+tf.nn.relu(tf.matmul(self.points, w22) + b22)
+                q_eval_1=tf.matmul(l1, w2) + b2  #4*49
+                q_eval_2=tf.nn.relu(tf.matmul(self.points, w22) + b22)  #7*49
+
+                q_eval_1=tf.reshape(q_eval_1,[-1,196]) #196=4*49
+                q_eval_2 = tf.reshape(q_eval_2, [-1, 343])  #343=7*49
+                # shape1=q_eval_1.get_shape().as_list()[0]
+                # shape2 = q_eval_2.get_shape().as_list()[0]
+
+            with tf.variable_scope('l3'):
+                w3 = tf.get_variable('w3', [196, self.n_actions], initializer=w_initializer, collections=c_names)
+                b3 = tf.get_variable('b3', [1, self.n_actions], initializer=b_initializer, collections=c_names)
+
+                w32 = tf.get_variable('w22', [343, self.n_actions], initializer=w_initializer, collections=c_names)
+
+                #self.q_eval = tf.matmul(l1, w2) + b2+tf.nn.relu(tf.matmul(self.points, w22) + b22)
+
+                self.q_eval=tf.matmul(q_eval_1,w3) +b3+ tf.matmul(q_eval_2,w32)
 
             # first layer. collections is used later when assign to target net
             # with tf.variable_scope('l1'):
@@ -134,8 +151,25 @@ class DeepQNetwork:
                                       collections=c_names)
                 b22 = tf.get_variable('b22', [1, self.n_actions], initializer=b_initializer, collections=c_names)
 
-                self.q_next = tf.matmul(l1, w2) + b2 + tf.nn.relu(tf.matmul(self.points_, w22) + b22)
+                q_next_1 = tf.matmul(l1, w2) + b2  # 4*49
+                q_next_2 = tf.nn.relu(tf.matmul(self.points_, w22) + b22)  # 7*49
 
+                q_next_1 = tf.reshape(q_next_1, [-1, 196])  # 196=4*49
+                q_next_2 = tf.reshape(q_next_2, [-1, 343])  # 343=7*49
+
+                # shape1 = q_next_1.get_shape().as_list()[0]
+                # shape2 = q_next_2.get_shape().as_list()[0]
+
+            with tf.variable_scope('l3'):
+                w3 = tf.get_variable('w3', [196, self.n_actions], initializer=w_initializer, collections=c_names)
+                b3 = tf.get_variable('b3', [1, self.n_actions], initializer=b_initializer, collections=c_names)
+
+                w32 = tf.get_variable('w22', [343, self.n_actions], initializer=w_initializer, collections=c_names)
+
+
+                # self.q_eval = tf.matmul(l1, w2) + b2+tf.nn.relu(tf.matmul(self.points, w22) + b22)
+
+                self.q_next = tf.matmul(q_next_1,w3) + b3 + tf.matmul(q_next_2,w32)
         # with tf.variable_scope('target_net'):
         #         # c_names(collections_names) are the collections to store variables
         #         c_names = ['target_net_params', tf.GraphKeys.GLOBAL_VARIABLES]
@@ -178,11 +212,13 @@ class DeepQNetwork:
         # self.memory[index, :] = transition
         #
         # self.memory_counter += 1
-
+        s=np.array(s)
+        s_ = np.array(s_)
         transition = np.array((s, [a, r], s_))
 
         # replace the old memory with new memory
         index = self.memory_counter % self.memory_size
+
         self.memory[index, :] = transition
 
         self.memory_counter += 1
@@ -206,7 +242,8 @@ class DeepQNetwork:
                 f_data_s.append(i[0])
             f_data_s=np.array(f_data_s)  #维数化为（4,50700）
             # print(f_data_s.shape)
-
+            # print("!!!!!!!!!!!")
+            # print(observation)
             data_points=np.array(observation[0,[0,1,2,3,8,9,10]])
             f_point_s = []
             for i in data_points:
@@ -233,26 +270,116 @@ class DeepQNetwork:
             sample_index = np.random.choice(self.memory_counter, size=self.batch_size)
         batch_memory = self.memory[sample_index, :]
 
+        # print("batch_memory:"+str(batch_memory))
+
         '''转换输入数据的维数'''
-        batch_memory_s_ = []
-        for i in batch_memory[:, 2][4:8]:
-            batch_memory_s_.append(i[0])
-            batch_memory_s_ = np.array(batch_memory_s_)
+        batch_memory_s_=np.array([])
+        t = 0
+        for observation in batch_memory[:, 2]:#[0,[4,5,6,7]]
+            # print("````````````````````````")
+            # print(observation)
+            # print(observation.shape) #(11,)
+            observation=np.array([observation])
+            data_s = np.array(observation[0,[4, 5, 6, 7]])
+            # print(data_s)
+            f_data_s = []
+            for i in data_s:
+                f_data_s.append(i[0])
+            f_data_s=np.array(f_data_s)
+            # print(f_data_s)
+            # print(f_data_s.shape)
+            if t==0:
+                batch_memory_s_=f_data_s
+            if t>0:
+                batch_memory_s_ = np.concatenate((batch_memory_s_,f_data_s))
+            t+=1
+        batch_memory_s_ = np.array(batch_memory_s_)
 
-        batch_memory_s = []
-        for i in batch_memory[:, 0][4:8]:
-            batch_memory_s.append(i[0])
-            batch_memory_s = np.array(batch_memory_s)
+        # batch_memory_s = []
+        # for i in batch_memory[:, 0][0,[4,5,6,7]]:
+        #     batch_memory_s.append(i[0])
+        # batch_memory_s = np.array(batch_memory_s)
 
-        batch_memory_points_ = []
-        for i in batch_memory[:, 2][0,1,2,3,8,9,10]:
-            batch_memory_points_.append([i[0], i[1]])
-        batch_memory_points_ = np.array(batch_memory_points_)
+        batch_memory_s = np.array([])
+        t = 0
+        for observation in batch_memory[:, 0]:  # [0,[4,5,6,7]]
+            # print("````````````````````````")
+            # print(observation)
+            # print(observation.shape) #(11,)
+            observation = np.array([observation])
+            data_s = np.array(observation[0, [4, 5, 6, 7]])
+            # print(data_s)
+            f_data_s = []
+            for i in data_s:
+                f_data_s.append(i[0])
+            f_data_s = np.array(f_data_s)
+            # print(f_data_s)
+            # print(f_data_s.shape)
+            if t == 0:
+                batch_memory_s = f_data_s
+            if t > 0:
+                batch_memory_s = np.concatenate((batch_memory_s, f_data_s))
+            t += 1
+        batch_memory_s = np.array(batch_memory_s)
 
-        batch_memory_points = []
-        for i in batch_memory[:, 0][0, 1, 2, 3, 8, 9, 10]:
-            batch_memory_points.append([i[0], i[1]])
-        batch_memory_points = np.array(batch_memory_points)
+        # batch_memory_points_ = []
+        # batch_memory1=batch_memory[:, 2]
+        # for i in batch_memory1[0,[0, 1, 2, 3, 8, 9, 10]]:
+        #     batch_memory_points_.append([i[0], i[1]])
+        # batch_memory_points_ = np.array(batch_memory_points_)
+
+        batch_memory_points_ = np.array([])
+        t = 0
+        for observation in batch_memory[:, 2]:  # [0,[4,5,6,7]]
+            # print("````````````````````````")
+            # print(observation)
+            # print(observation.shape) #(11,)
+            observation = np.array([observation])
+            data_s = np.array(observation[0, [0, 1, 2, 3, 8, 9, 10]])
+            # print(data_s)
+            f_data_s = []
+            for i in data_s:
+                f_data_s.append([i[0], i[1]])
+            f_data_s = np.array(f_data_s)
+            # print(f_data_s)
+            # print(f_data_s.shape)
+            if t == 0:
+                batch_memory_points_ = f_data_s
+            if t > 0:
+                batch_memory_points_ = np.concatenate((batch_memory_points_, f_data_s))
+            t += 1
+            batch_memory_points_ = np.array(batch_memory_points_)
+
+
+
+        # batch_memory_points = []
+        # batch_memory2 = batch_memory[:, 0]
+        # for i in batch_memory2[0,[0, 1, 2, 3, 8, 9, 10]]:
+        #     batch_memory_points.append([i[0], i[1]])
+        # batch_memory_points = np.array(batch_memory_points)
+
+        batch_memory_points = np.array([])
+        t = 0
+        for observation in batch_memory[:, 0]:  # [0,[4,5,6,7]]
+            # print("````````````````````````")
+            # print(observation)
+            # print(observation.shape) #(11,)
+            observation = np.array([observation])
+            data_s = np.array(observation[0, [0, 1, 2, 3, 8, 9, 10]])
+            # print(data_s)
+            f_data_s = []
+            for i in data_s:
+                f_data_s.append([i[0], i[1]])
+            f_data_s = np.array(f_data_s)
+            # print(f_data_s)
+            # print(f_data_s.shape)
+            if t == 0:
+                batch_memory_points = f_data_s
+            if t > 0:
+                batch_memory_points = np.concatenate((batch_memory_points, f_data_s))
+            t += 1
+            batch_memory_points = np.array(batch_memory_points)
+
 
         q_next, q_eval = self.sess.run(
             [self.q_next, self.q_eval],
@@ -267,8 +394,12 @@ class DeepQNetwork:
         q_target = q_eval.copy()
 
         batch_index = np.arange(self.batch_size, dtype=np.int32)
-        eval_act_index = batch_memory[:, 1][0].astype(int)
-        reward = batch_memory[:, 1][1]
+        list_memory=batch_memory[:, 1][0]
+        # eval_act_index = batch_memory[:, 1][0].astype(int)
+        # reward = batch_memory[:, 1][1]
+
+        eval_act_index =int(list_memory[0])
+        reward =list_memory[1]
 
         q_target[batch_index, eval_act_index] = reward + self.gamma * np.max(q_next, axis=1)
 
@@ -299,15 +430,59 @@ class DeepQNetwork:
         """
 
         # train eval network
-        batch_memory_points = []
-        for i in batch_memory[:, 0][0, 1, 2, 3, 8, 9, 10]:
-            batch_memory_points.append([i[0], i[1]])
-        batch_memory_points = np.array(batch_memory_points)
+        # batch_memory_points = []
+        # for i in batch_memory[:, 0][0, 1, 2, 3, 8, 9, 10]:
+        #     batch_memory_points.append([i[0], i[1]])
+        # batch_memory_points = np.array(batch_memory_points)
 
-        batch_memory_s = []
-        for i in batch_memory[:, 0][4:8]:
-            batch_memory_s.append(i[0])
-            batch_memory_s = np.array(batch_memory_s)
+        batch_memory_points = np.array([])
+        t = 0
+        for observation in batch_memory[:, 0]:  # [0,[4,5,6,7]]
+            # print("````````````````````````")
+            # print(observation)
+            # print(observation.shape) #(11,)
+            observation = np.array([observation])
+            data_s = np.array(observation[0, [0, 1, 2, 3, 8, 9, 10]])
+            # print(data_s)
+            f_data_s = []
+            for i in data_s:
+                f_data_s.append([i[0], i[1]])
+            f_data_s = np.array(f_data_s)
+            # print(f_data_s)
+            # print(f_data_s.shape)
+            if t == 0:
+                batch_memory_points = f_data_s
+            if t > 0:
+                batch_memory_points = np.concatenate((batch_memory_points, f_data_s))
+            t += 1
+            batch_memory_points = np.array(batch_memory_points)
+
+        # batch_memory_s = []
+        # for i in batch_memory[:, 0][4:8]:
+        #     batch_memory_s.append(i[0])
+        #     batch_memory_s = np.array(batch_memory_s)
+
+        batch_memory_s = np.array([])
+        t = 0
+        for observation in batch_memory[:, 0]:  # [0,[4,5,6,7]]
+            # print("````````````````````````")
+            # print(observation)
+            # print(observation.shape) #(11,)
+            observation = np.array([observation])
+            data_s = np.array(observation[0, [4, 5, 6, 7]])
+            # print(data_s)
+            f_data_s = []
+            for i in data_s:
+                f_data_s.append(i[0])
+            f_data_s = np.array(f_data_s)
+            # print(f_data_s)
+            # print(f_data_s.shape)
+            if t == 0:
+                batch_memory_s = f_data_s
+            if t > 0:
+                batch_memory_s = np.concatenate((batch_memory_s, f_data_s))
+            t += 1
+        batch_memory_s = np.array(batch_memory_s)
 
 
 
@@ -317,7 +492,7 @@ class DeepQNetwork:
                                                 self.points: batch_memory_points,
                                                 self.q_target: q_target})
 
-        print(str(self.cost))
+        # print(str(self.cost))
         self.cost_his.append(self.cost)
 
         # increasing epsilon
